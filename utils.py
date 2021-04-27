@@ -111,3 +111,4 @@ def calc_score(data_season, data_year, time_dic):
     else:
         return 0.0, False
 
+

@@ -5,11 +5,15 @@ import json
 import requests
 import pandas as pd
 import re
+import os
+import os.path as osp
+import time 
+import pickle
 
 def get_HTML(url):
     header = {"User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Mobile Safari/537.36"}
     try:
-        r = requests.get(url,timeout = 30,headers=header)
+        r = requests.get(url,timeout = 90,headers=header)
         r.raise_for_status()
         r.encoding = r.apparent_encoding   #指定编码形式
         return r.text
@@ -18,29 +22,43 @@ def get_HTML(url):
 
 def get_stock_trend():
     print("Getting stock trending...")
-    style_dic = {"399372":"大盘成长",
-                 "399373":"大盘价值",
-                 "399374":"中盘成长",
-                 "399375":"中盘价值",
-                 "399376":"小盘成长",
-                 "399377":"小盘价值"}
-    earn_dic = {}
-    for idx, name in tqdm(style_dic.items()):
-        url = "http://quotes.money.163.com/trade/lsjysj_zhishu_%s.html" % idx
-        text = get_HTML(url)
-        soup = BeautifulSoup(text,"html.parser")
-        table=soup.findAll('table',{"class":"table_bg001 border_box limit_sale"})
-        assert len(table) == 1, "Can't find history data from "+url+"!"
-        table=table[0]
-        trs = table.findAll('tr')
-        whole_earn_percent = {}
-        for i in range(1, len(trs)):
-            tds = trs[i].findAll('td')
-            date = tds[0].get_text()
-            earn_percent = float(tds[6].get_text())
-            whole_earn_percent.update({date:earn_percent})
-        earn_dic.update({idx:whole_earn_percent})
-    return earn_dic, style_dic
+    cur_t = time.strftime("%Y-%m-%d",time.localtime())
+    os.makedirs("cache", exist_ok=True)
+    f_name = osp.join("cache", "stock_trend_"+cur_t+".pkl")
+    if osp.isfile(f_name):
+        print ("reading cache", f_name)
+        with open(f_name, "rb") as f:
+            dic = pickle.load(f)
+        return dic["earn_dic"], dic["style_dic"]
+    else:
+        dic = {}
+        style_dic = {"399372":"大盘成长",
+                     "399373":"大盘价值",
+                     "399374":"中盘成长",
+                     "399375":"中盘价值",
+                     "399376":"小盘成长",
+                     "399377":"小盘价值"}
+        earn_dic = {}
+        for idx, name in tqdm(style_dic.items()):
+            url = "http://quotes.money.163.com/trade/lsjysj_zhishu_%s.html" % idx
+            text = get_HTML(url)
+            soup = BeautifulSoup(text,"html.parser")
+            table=soup.findAll('table',{"class":"table_bg001 border_box limit_sale"})
+            assert len(table) == 1, "Can't find history data from "+url+"!"
+            table=table[0]
+            trs = table.findAll('tr')
+            whole_earn_percent = {}
+            for i in range(1, len(trs)):
+                tds = trs[i].findAll('td')
+                date = tds[0].get_text()
+                earn_percent = float(tds[6].get_text())
+                whole_earn_percent.update({date:earn_percent})
+            earn_dic.update({idx:whole_earn_percent})
+            dic["earn_dic"] = earn_dic
+            dic["style_dic"] = style_dic
+            with open(f_name, "wb") as f:
+                pickle.dump(dic, f)
+        return earn_dic, style_dic
 
 def get_fund_earning(fund_list):
     url = 'http://api.fund.eastmoney.com/f10/lsjz'
